@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Audio Meet Phase 3</title>
+</head>
+<body>
+  <h2>Audio Meet (Phase 1 + 2 + 3)</h2>
+
+  <select id="role">
+    <option value="admin">Admin</option>
+    <option value="user">User</option>
+  </select>
+
+  <button onclick="join()">Join</button>
+  <button onclick="stopRecording()">Stop & Save My Audio</button>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://unpkg.com/mediasoup-client@3/lib/index.js"></script>
+
+  <script>
+    const socket = io();
+    let recorder, chunks = [];
+
+    async function join() {
+      const role = document.getElementById("role").value;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // Phase-1: user recording
+      recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = e => chunks.push(e.data);
+      recorder.start();
+
+      socket.emit("join-room", { roomId: "room1", role });
+
+      // Phase-3: send audio to admin for full recording
+      const audioCtx = new AudioContext();
+      const source = audioCtx.createMediaStreamSource(stream);
+      const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+
+      source.connect(processor);
+      processor.connect(audioCtx.destination);
+
+      processor.onaudioprocess = e => {
+        socket.emit("admin-audio", e.inputBuffer.getChannelData(0));
+      };
+    }
+
+    function stopRecording() {
+      recorder.stop();
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: "audio/webm" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "my-voice.webm";
+        a.click();
+      };
+    }
+  </script>
+</body>
+</html>
